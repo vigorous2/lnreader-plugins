@@ -2468,6 +2468,24 @@
 		"iconUrl": "https://raw.githubusercontent.com/vigorous2/lnreader-plugins/plugins/v3.0.0/public/static/src/uk/smakolykytl/icon.png"
 	},
 	{
+		"id": "dualeotruyenfull",
+		"name": "Dưa Leo Truyện",
+		"site": "https://dualeotruyenfull.net",
+		"lang": "Tiếng Việt",
+		"version": "1.0.0",
+		"url": "https://raw.githubusercontent.com/vigorous2/lnreader-plugins/plugins/v3.0.0/.js/src/plugins/vietnamese/dualeotruyenfull.js",
+		"iconUrl": "https://raw.githubusercontent.com/vigorous2/lnreader-plugins/plugins/v3.0.0/public/static/src/vi/dualeotruyenfull/icon.png"
+	},
+	{
+		"id": "hahatruyen",
+		"name": "Haha Truyện",
+		"site": "https://hahatruyen.com.vn",
+		"lang": "Tiếng Việt",
+		"version": "1.0.0",
+		"url": "https://raw.githubusercontent.com/vigorous2/lnreader-plugins/plugins/v3.0.0/.js/src/plugins/vietnamese/hahatruyen.js",
+		"iconUrl": "https://raw.githubusercontent.com/vigorous2/lnreader-plugins/plugins/v3.0.0/public/static/src/vi/hahatruyen/icon.png"
+	},
+	{
 		"id": "lightnovel.vn",
 		"name": "Light Novel VN",
 		"site": "https://lightnovel.vn",
@@ -2475,6 +2493,15 @@
 		"version": "1.0.0",
 		"url": "https://raw.githubusercontent.com/vigorous2/lnreader-plugins/plugins/v3.0.0/.js/src/plugins/vietnamese/lightnovelvn.js",
 		"iconUrl": "https://raw.githubusercontent.com/vigorous2/lnreader-plugins/plugins/v3.0.0/public/static/src/vi/lightnovelvn/icon.png"
+	},
+	{
+		"id": "lmvn",
+		"name": "LMVN",
+		"site": "https://lmvn.com",
+		"lang": "Tiếng Việt",
+		"version": "1.0.0",
+		"url": "https://raw.githubusercontent.com/vigorous2/lnreader-plugins/plugins/v3.0.0/.js/src/plugins/vietnamese/lmvn.js",
+		"iconUrl": "https://raw.githubusercontent.com/vigorous2/lnreader-plugins/plugins/v3.0.0/public/static/src/vi/lmvn/icon.png"
 	},
 	{
 		"id": "ln.hako",
