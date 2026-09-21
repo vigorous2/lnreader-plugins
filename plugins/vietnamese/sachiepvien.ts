@@ -3,8 +3,8 @@ import { Plugin } from '@/types/plugin';
 import { load as loadCheerio } from 'cheerio';
 import { defaultCover } from '@libs/defaultCover';
 import { NovelStatus } from '@libs/novelStatus';
-import { ctr } from '@noble/ciphers/aes.js';
-import JSZip from 'jszip';
+import { aesCtrDecrypt } from './aesCtr';
+import { unzipSync, strFromU8 } from 'fflate';
 import { FilterTypes, Filters } from '@libs/filterInputs';
 
 type ChapterData = {
@@ -96,35 +96,52 @@ async function downloadAndDecryptMega(
     );
   }
 
-  // 4. Decrypt via noble/ciphers AES-CTR
-  const cipher = ctr(aesKeyBytes, ivBytes);
-  const decBytes = cipher.decrypt(encBytes);
+  // 4. Decrypt via inlined AES-CTR
+  const decBytes = aesCtrDecrypt(aesKeyBytes, ivBytes, encBytes);
   return decBytes;
 }
 
-async function parseEpubBytes(bytes: Uint8Array): Promise<ChapterData[]> {
-  const loaded = await JSZip.loadAsync(bytes);
+function parseEpubBytes(bytes: Uint8Array): ChapterData[] {
+  const unzipped = unzipSync(bytes);
   let opfPath = 'content.opf';
 
-  // Read META-INF/container.xml if present
-  const containerXml = await loaded
-    .file('META-INF/container.xml')
-    ?.async('string');
-  if (containerXml) {
-    const $c = loadCheerio(containerXml, { xmlMode: true });
-    const fullPath = $c('rootfile').attr('full-path');
-    if (fullPath) opfPath = fullPath;
+  // Find container.xml (case-insensitive search)
+  for (const filename of Object.keys(unzipped)) {
+    if (filename.toLowerCase() === 'meta-inf/container.xml') {
+      const containerXml = strFromU8(unzipped[filename]);
+      const $c = loadCheerio(containerXml, { xmlMode: true });
+      const fullPath = $c('rootfile').attr('full-path');
+      if (fullPath) opfPath = fullPath;
+      break;
+    }
+  }
+
+  // Find the OPF file in unzipped archive
+  let opfData: Uint8Array | undefined = unzipped[opfPath];
+  if (!opfData) {
+    // Try matching case-insensitively or ending with .opf
+    for (const key of Object.keys(unzipped)) {
+      if (
+        key.toLowerCase() === opfPath.toLowerCase() ||
+        key.toLowerCase().endsWith('.opf')
+      ) {
+        opfPath = key;
+        opfData = unzipped[key];
+        break;
+      }
+    }
+  }
+
+  if (!opfData) {
+    throw new Error('Không tìm thấy tệp content.opf trong file EPUB');
   }
 
   const opfDir = opfPath.includes('/')
     ? opfPath.substring(0, opfPath.lastIndexOf('/') + 1)
     : '';
-  const opfXml = await loaded.file(opfPath)?.async('string');
-  if (!opfXml) {
-    throw new Error('Không tìm thấy tệp content.opf trong file EPUB');
-  }
-
+  const opfXml = strFromU8(opfData);
   const $opf = loadCheerio(opfXml, { xmlMode: true });
+
   const manifestMap = new Map<string, string>();
   $opf('manifest item').each((_, item) => {
     const id = $opf(item).attr('id');
@@ -141,14 +158,14 @@ async function parseEpubBytes(bytes: Uint8Array): Promise<ChapterData[]> {
     const href = manifestMap.get(idref);
     if (!href) continue;
 
-    // Decode URI path in case href is URL-encoded
     const decodedHref = decodeURIComponent(href);
     const fullPath = opfDir + decodedHref;
-    const file = loaded.file(fullPath) || loaded.file(opfDir + href);
-    if (file) {
-      const content = await file.async('string');
+    const fileBytes =
+      unzipped[fullPath] || unzipped[opfDir + href] || unzipped[href];
+    if (fileBytes) {
+      const content = strFromU8(fileBytes);
       const $ch = loadCheerio(content);
-      // Skip nav / toc files if they only contain navigation links
+
       if (
         decodedHref.toLowerCase().includes('nav') ||
         decodedHref.toLowerCase().includes('toc')
@@ -242,7 +259,7 @@ class SachHiepVienPlugin implements Plugin.PluginBase {
   name = 'Sắc Hiệp Viện';
   icon = 'src/vi/sachiepvien/icon.png';
   site = 'https://sachiepvien.net';
-  version = '1.0.3';
+  version = '1.0.4';
 
   filters = {
     category: {
