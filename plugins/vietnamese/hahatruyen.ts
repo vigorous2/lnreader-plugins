@@ -9,9 +9,8 @@ class HahaTruyenPlugin implements Plugin.PluginBase {
   name = 'Haha Truyện';
   icon = 'src/vi/hahatruyen/icon.png';
   site = 'https://hahatruyen.com.vn';
-  version = '1.0.0';
+  version = '1.0.2';
 
-  // Fallback domains if main site changes domain or is blocked
   fallbackSites = [
     'https://hahatruyen.com.vn',
     'https://hahatruyen.com',
@@ -51,8 +50,8 @@ class HahaTruyenPlugin implements Plugin.PluginBase {
   }
 
   async popularNovels(pageNo: number): Promise<Plugin.NovelItem[]> {
-    // If page 1, fetch homepage; if page > 1, fetch genre page
-    const url = pageNo === 1 ? '/' : `/vi/68/truyen-ngon-tinh-sac-gioi/page-${pageNo}/`;
+    const url =
+      pageNo === 1 ? '/' : `/vi/68/truyen-ngon-tinh-sac-gioi/page-${pageNo}/`;
     const body = await this.fetchWithFallback(url);
     const $ = loadCheerio(body);
 
@@ -69,7 +68,6 @@ class HahaTruyenPlugin implements Plugin.PluginBase {
       }
       href = href.replace(/^https?:\/\/[^/]+/, '');
 
-      // Exclude short category links (/vi/68/...)
       const match = href.match(/\/vi\/(\d+)\/([^/]+)/);
       if (!match || Number(match[1]) < 100) return;
 
@@ -80,7 +78,6 @@ class HahaTruyenPlugin implements Plugin.PluginBase {
       if (!name) {
         name = link.attr('title') || link.text().trim();
       }
-      // Clean up prefix
       name = name.replace(/^Truyện\s+(h\+\s+)?sắc\s+/i, '').trim();
 
       const img = $(ele).find('img').first();
@@ -105,7 +102,8 @@ class HahaTruyenPlugin implements Plugin.PluginBase {
     const body = await this.fetchWithFallback(novelPath);
     const $ = loadCheerio(body);
 
-    const title = $('h1').first().text().trim() || $('.title').first().text().trim();
+    const title =
+      $('h1').first().text().trim() || $('.title').first().text().trim();
     const img = $('.thumb img, .divdocok img, img').first();
     let cover = img.attr('src') || img.attr('data-src') || defaultCover;
     if (cover.startsWith('/')) {
@@ -118,12 +116,16 @@ class HahaTruyenPlugin implements Plugin.PluginBase {
       cover,
     };
 
-    novel.summary = $('.desc, .description, .intro, .detail-content, .story-intro')
+    novel.summary = $(
+      '.desc, .description, .intro, .detail-content, .story-intro',
+    )
       .first()
       .text()
       .trim();
 
-    novel.author = $('.author a, .info:contains("Tác giả") a, .meta:contains("Tác giả")')
+    novel.author = $(
+      '.author a, .info:contains("Tác giả") a, .meta:contains("Tác giả")',
+    )
       .first()
       .text()
       .trim();
@@ -137,31 +139,61 @@ class HahaTruyenPlugin implements Plugin.PluginBase {
 
     novel.status = NovelStatus.Ongoing;
 
-    const chapters: Plugin.ChapterItem[] = [];
-    const seenChaps = new Set<string>();
-
+    // Detect highest chapter number
+    let maxChapter = 0;
+    const cleanNovelPath = novelPath.replace(/\/$/, '');
     $('a[href*="/truyen-full-chapter-"]').each((_, ele) => {
-      let href = $(ele).attr('href');
-      let name = $(ele).text().trim();
-      if (!href) return;
-
-      for (const s of this.fallbackSites) {
-        href = href.replace(s, '');
+      const h = $(ele).attr('href') || '';
+      const m = h.match(/truyen-full-chapter-(\d+)/);
+      if (m) {
+        const num = parseInt(m[1], 10);
+        if (num > maxChapter) maxChapter = num;
       }
-      href = href.replace(/^https?:\/\/[^/]+/, '');
-
-      if (name.toLowerCase() === 'sau' || name.toLowerCase() === 'trước') return;
-      if (seenChaps.has(href)) return;
-      seenChaps.add(href);
-
-      chapters.push({
-        name,
-        path: href,
-      });
     });
 
-    // Sort chapters in ascending order if needed
-    novel.chapters = chapters.reverse();
+    const chapters: Plugin.ChapterItem[] = [];
+
+    // If sequential chapters are detected, generate all chapters 1..maxChapter
+    // Note: On HahaTruyen, Chapter 1 is the base novel page itself (${cleanNovelPath}/),
+    // while Chapter 2 onwards are ${cleanNovelPath}/truyen-full-chapter-2/ up to N.
+    if (maxChapter > 0) {
+      chapters.push({
+        name: 'Chương 1',
+        path: `${cleanNovelPath}/`,
+      });
+      for (let i = 2; i <= maxChapter; i++) {
+        chapters.push({
+          name: `Chương ${i}`,
+          path: `${cleanNovelPath}/truyen-full-chapter-${i}/`,
+        });
+      }
+    } else {
+      // Fallback: collect any linked chapters
+      const seenChaps = new Set<string>();
+      $('a[href*="/truyen-full-chapter-"]').each((_, ele) => {
+        let href = $(ele).attr('href');
+        let name = $(ele).text().trim();
+        if (!href) return;
+
+        for (const s of this.fallbackSites) {
+          href = href.replace(s, '');
+        }
+        href = href.replace(/^https?:\/\/[^/]+/, '');
+
+        if (name.toLowerCase() === 'sau' || name.toLowerCase() === 'trước')
+          return;
+        if (seenChaps.has(href)) return;
+        seenChaps.add(href);
+
+        chapters.push({
+          name,
+          path: href,
+        });
+      });
+      chapters.reverse();
+    }
+
+    novel.chapters = chapters;
     return novel;
   }
 
@@ -169,11 +201,14 @@ class HahaTruyenPlugin implements Plugin.PluginBase {
     const body = await this.fetchWithFallback(chapterPath);
     const $ = loadCheerio(body);
 
-    // Remove ads and copyright notice
     $('.ads, script, style, .social-share, .fb-like').remove();
-    $('#tctcontent p:contains("DMCA"), #tctcontent p:contains("HaHa Truyện là nền tảng")').remove();
+    $(
+      '#tctcontent p:contains("DMCA"), #tctcontent p:contains("HaHa Truyện là nền tảng")',
+    ).remove();
 
-    const chapterText = $('#tctcontent, .content.col-xs-24, #chapter-content').html();
+    const chapterText = $(
+      '#tctcontent, .content.col-xs-24, #chapter-content',
+    ).html();
     return chapterText || '';
   }
 

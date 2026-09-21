@@ -72,15 +72,20 @@ class LMVNPlugin implements Plugin.PluginBase {
     let title = pageTitle.replace(/\s*-\s*Truyen\.com\s*$/i, '').trim();
 
     let author = '';
-    $('a[href*="tacgiaID="]').first().each((_, a) => {
-      author = $(a).text().trim();
-    });
+    $('a[href*="tacgiaID="]')
+      .first()
+      .each((_, a) => {
+        author = $(a).text().trim();
+      });
 
     if (!author && title.includes('-')) {
       const parts = title.split('-');
       if (parts.length >= 2) {
         author = parts[parts.length - 1].trim();
-        title = parts.slice(0, parts.length - 1).join('-').trim();
+        title = parts
+          .slice(0, parts.length - 1)
+          .join('-')
+          .trim();
       }
     }
 

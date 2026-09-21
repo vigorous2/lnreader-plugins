@@ -9,7 +9,7 @@ class DuaLeoTruyenPlugin implements Plugin.PluginBase {
   name = 'Dưa Leo Truyện';
   icon = 'src/vi/dualeotruyenfull/icon.png';
   site = 'https://dualeotruyenfull.net';
-  version = '1.0.0';
+  version = '1.0.1';
 
   fallbackSites = [
     'https://dualeotruyenfull.net',
@@ -50,7 +50,8 @@ class DuaLeoTruyenPlugin implements Plugin.PluginBase {
   }
 
   async popularNovels(pageNo: number): Promise<Plugin.NovelItem[]> {
-    const url = pageNo === 1 ? '/moi-cap-nhat/' : `/moi-cap-nhat/page/${pageNo}/`;
+    const url =
+      pageNo === 1 ? '/moi-cap-nhat/' : `/moi-cap-nhat/page/${pageNo}/`;
     const body = await this.fetchWithFallback(url);
     const $ = loadCheerio(body);
 
@@ -134,33 +135,62 @@ class DuaLeoTruyenPlugin implements Plugin.PluginBase {
 
     novel.status = NovelStatus.Ongoing;
 
+    // Detect total pages in chapter-list tabs
+    let maxPage = 1;
+    $('a[href*="/chuong/page/"]').each((_, a) => {
+      const h = $(a).attr('href') || '';
+      const m = h.match(/\/chuong\/page\/(\d+)\//);
+      if (m) {
+        const p = parseInt(m[1], 10);
+        if (p > maxPage) maxPage = p;
+      }
+    });
+
     const chapters: Plugin.ChapterItem[] = [];
     const seen = new Set<string>();
 
-    $('a[href*="/chuong-"], a[href*="/chapter-"]').each((_, ele) => {
-      let href = $(ele).attr('href');
-      let name = $(ele).text().trim();
-      if (!href) return;
+    const extractChaptersFrom$ = ($page: ReturnType<typeof loadCheerio>) => {
+      $page('a[href*="/chuong-"], a[href*="/chapter-"]').each((_, ele) => {
+        let href = $page(ele).attr('href');
+        let name = $page(ele).text().trim();
+        if (!href) return;
 
-      for (const s of this.fallbackSites) {
-        href = href.replace(s, '');
+        for (const s of this.fallbackSites) {
+          href = href.replace(s, '');
+        }
+        href = href.replace(/^https?:\/\/[^/]+/, '');
+
+        if (name.includes('\n')) {
+          name = name.split('\n')[0].trim();
+        }
+
+        if (seen.has(href)) return;
+        seen.add(href);
+
+        if (name && href) {
+          chapters.push({
+            name,
+            path: href,
+          });
+        }
+      });
+    };
+
+    // Extract first page
+    extractChaptersFrom$($);
+
+    // If there are multiple pages, fetch subsequent pages
+    const cleanNovelPath = novelPath.replace(/\/$/, '');
+    for (let p = 2; p <= maxPage; p++) {
+      try {
+        const pageUrl = `${cleanNovelPath}/chuong/page/${p}/#chapter-list`;
+        const pageBody = await this.fetchWithFallback(pageUrl);
+        const $p = loadCheerio(pageBody);
+        extractChaptersFrom$($p);
+      } catch {
+        break;
       }
-      href = href.replace(/^https?:\/\/[^/]+/, '');
-
-      if (name.includes('\n')) {
-        name = name.split('\n')[0].trim();
-      }
-
-      if (seen.has(href)) return;
-      seen.add(href);
-
-      if (name && href) {
-        chapters.push({
-          name,
-          path: href,
-        });
-      }
-    });
+    }
 
     novel.chapters = chapters;
     return novel;
@@ -170,7 +200,9 @@ class DuaLeoTruyenPlugin implements Plugin.PluginBase {
     const body = await this.fetchWithFallback(chapterPath);
     const $ = loadCheerio(body);
 
-    $('#ads-chapter-top, #ads-chapter-bottom, .ads, script, style, .iue-content, .uk-pagination').remove();
+    $(
+      '#ads-chapter-top, #ads-chapter-bottom, .ads, script, style, .iue-content, .uk-pagination',
+    ).remove();
 
     const chapterText = $(
       '#chapter-content, .uk-article.text-based, .chapter-body, .entry-content',
@@ -196,7 +228,6 @@ class DuaLeoTruyenPlugin implements Plugin.PluginBase {
       }
       href = href.replace(/^https?:\/\/[^/]+/, '');
 
-      // Avoid comment or chapter links
       if (href.includes('#') || href.includes('/chuong-')) return;
       const match = href.match(/^\/doc-truyen\/([^/]+)\/?$/);
       if (!match) return;
