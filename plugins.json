@@ -2508,7 +2508,7 @@
 		"name": "Sắc Hiệp Viện",
 		"site": "https://sachiepvien.net",
 		"lang": "Tiếng Việt",
-		"version": "1.0.7",
+		"version": "1.0.8",
 		"url": "https://raw.githubusercontent.com/vigorous2/lnreader-plugins/plugins/v3.0.0/.js/src/plugins/vietnamese/sachiepvien.js",
 		"iconUrl": "https://raw.githubusercontent.com/vigorous2/lnreader-plugins/plugins/v3.0.0/public/static/src/vi/sachiepvien/icon.png"
 	},
