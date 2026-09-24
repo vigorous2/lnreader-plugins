@@ -23,6 +23,7 @@ npm run clean:multisrc
 npm run build:multisrc
 echo "Compiling TypeScript..."
 npx tsc --project tsconfig.production.json
+$env:BRANCH = $dist
 npm run build:manifest
 
 if (-not (Test-Path .dist) -or -not (Get-ChildItem -Path .dist -Force)) {
