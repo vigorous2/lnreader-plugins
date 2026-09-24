@@ -327,10 +327,7 @@ async function downloadAndDecryptMega(
   return decBytes;
 }
 
-function parseEpubBytes(bytes: Uint8Array): {
-  chapters: ChapterData[];
-  coverBase64?: string;
-} {
+function parseEpubBytes(bytes: Uint8Array): ChapterData[] {
   const unzipped = unzipSync(bytes);
   let opfPath = 'content.opf';
 
@@ -372,48 +369,14 @@ function parseEpubBytes(bytes: Uint8Array): {
   const $opf = loadCheerio(opfXml, { xmlMode: true });
 
   const manifestMap = new Map<string, string>();
-  const chapters: ChapterData[] = [];
-  const itemrefs = $opf('spine itemref');
-
-  let coverHref: string | undefined;
   $opf('manifest item').each((_, item) => {
     const id = $opf(item).attr('id');
     const href = $opf(item).attr('href');
-    const props = $opf(item).attr('properties');
-    const mediaType = $opf(item).attr('media-type');
-    if (id && href) {
-      manifestMap.set(id, href);
-      if (
-        props?.includes('cover-image') ||
-        id.toLowerCase().includes('cover') ||
-        (!coverHref &&
-          mediaType?.startsWith('image/') &&
-          href.toLowerCase().includes('cover'))
-      ) {
-        coverHref = href;
-      }
-    }
+    if (id && href) manifestMap.set(id, href);
   });
 
-  let coverBase64: string | undefined;
-  if (coverHref) {
-    const decodedCoverHref = decodeURIComponent(coverHref);
-    const coverBytes =
-      unzipped[opfDir + decodedCoverHref] ||
-      unzipped[opfDir + coverHref] ||
-      unzipped[coverHref];
-    if (coverBytes && coverBytes.length > 0 && coverBytes.length < 2_000_000) {
-      let mime = 'image/jpeg';
-      if (coverHref.toLowerCase().endsWith('.png')) mime = 'image/png';
-      else if (coverHref.toLowerCase().endsWith('.webp')) mime = 'image/webp';
-      let binary = '';
-      const len = coverBytes.byteLength;
-      for (let k = 0; k < len; k++) {
-        binary += String.fromCharCode(coverBytes[k]);
-      }
-      coverBase64 = `data:${mime};base64,${btoa(binary)}`;
-    }
-  }
+  const chapters: ChapterData[] = [];
+  const itemrefs = $opf('spine itemref');
 
   for (let i = 0; i < itemrefs.length; i++) {
     const idref = $opf(itemrefs[i]).attr('idref');
@@ -453,7 +416,7 @@ function parseEpubBytes(bytes: Uint8Array): {
     }
   }
 
-  return { chapters, coverBase64 };
+  return chapters;
 }
 
 function formatChapterName(rawName: string, index: number): string {
@@ -522,7 +485,7 @@ class SachHiepVienPlugin implements Plugin.PluginBase {
   name = 'Sắc Hiệp Viện';
   icon = 'src/vi/sachiepvien/icon.png';
   site = 'https://sachiepvien.net';
-  version = '1.0.9';
+  version = '1.0.10';
 
   filters = {
     category: {
@@ -567,7 +530,7 @@ class SachHiepVienPlugin implements Plugin.PluginBase {
       const href = $(ele).attr('href');
       const name = $(ele).text().trim();
       const card = $(ele).closest(
-        '.rh_grid_image_wrapper, .news-community, article, .col_item, .news_out_tabs',
+        '.rh_grid_image_wrapper, article, .col_item, .news-community, .news_out_tabs, .newsdetail',
       );
       const coverImg = card.find('.newsimage img, figure img, img').first();
       const cover =
@@ -715,11 +678,7 @@ class SachHiepVienPlugin implements Plugin.PluginBase {
 
           let chapters: ChapterData[];
           if (isZip) {
-            const epubResult = parseEpubBytes(decryptedBytes);
-            chapters = epubResult.chapters;
-            if (epubResult.coverBase64) {
-              cover = epubResult.coverBase64;
-            }
+            chapters = await parseEpubBytes(decryptedBytes);
           } else {
             const fullText = new TextDecoder('utf-8').decode(decryptedBytes);
             chapters = splitTextToChapters(fullText);
@@ -806,7 +765,7 @@ class SachHiepVienPlugin implements Plugin.PluginBase {
       const href = $(ele).attr('href');
       const name = $(ele).text().trim();
       const card = $(ele).closest(
-        '.rh_grid_image_wrapper, .news-community, article, .col_item, .news_out_tabs',
+        '.rh_grid_image_wrapper, article, .col_item, .news-community, .news_out_tabs, .newsdetail',
       );
       const coverImg = card.find('.newsimage img, figure img, img').first();
       const cover =
