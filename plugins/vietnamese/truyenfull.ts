@@ -1,0 +1,230 @@
+import { CheerioAPI, load as parseHTML } from 'cheerio';
+import { fetchApi } from '@libs/fetch';
+import { Plugin } from '@/types/plugin';
+import { NovelStatus } from '@libs/novelStatus';
+import { FilterTypes, Filters } from '@libs/filterInputs';
+
+class TruyenFull implements Plugin.PagePlugin {
+  id = 'truyenfull';
+  name = 'Truyện Full';
+  icon = 'src/vi/truyenfull/icon.png';
+  site = 'https://truyenfull.live';
+  version = '2.0.0';
+
+  parseNovels(loadedCheerio: CheerioAPI) {
+    const novels: Plugin.NovelItem[] = [];
+    loadedCheerio('.list-truyen .row').each((idx, ele) => {
+      const titleAnchor = loadedCheerio(ele).find('h3.truyen-title > a');
+      const novelName = titleAnchor.text().trim();
+      const novelUrl = titleAnchor.attr('href');
+
+      if (novelName && novelUrl) {
+        const novelCover =
+          loadedCheerio(ele)
+            .find("div[data-classname='cover']")
+            .attr('data-image') ||
+          loadedCheerio(ele).find('.lazyimg').attr('data-image') ||
+          loadedCheerio(ele).find('img').attr('src') ||
+          loadedCheerio(ele).find('img').attr('data-src');
+
+        novels.push({
+          name: novelName,
+          cover: novelCover,
+          path: novelUrl.replace(this.site, ''),
+        });
+      }
+    });
+    return novels;
+  }
+
+  parseChapters(loadedCheerio: CheerioAPI): Plugin.ChapterItem[] {
+    return loadedCheerio('ul.list-chapter > li > a')
+      .toArray()
+      .map(ele => {
+        const path = (ele.attribs['href'] || '').replace(this.site, '');
+        return {
+          name: loadedCheerio(ele).text().trim(),
+          path,
+          chapterNumber: Number(
+            path.match(/\/chuong-(\d+)\/?$/)?.[1] ||
+              path.match(/\/chuong-(\d+)\//)?.[1],
+          ),
+        };
+      });
+  }
+
+  async popularNovels(
+    pageNo: number,
+    {
+      showLatestNovels,
+      filters,
+    }: Plugin.PopularNovelsOptions<typeof this.filters>,
+  ): Promise<Plugin.NovelItem[]> {
+    let sort = 'truyen-hot';
+    if (showLatestNovels) {
+      sort = 'truyen-moi';
+    } else if (filters?.sort?.value) {
+      sort = filters.sort.value;
+    }
+
+    let url = `${this.site}/danh-sach/${sort}`;
+    if (filters?.status?.value) {
+      for (const status of filters.status.value) {
+        url += `/${status}`;
+      }
+    }
+    url += `/trang-${pageNo}`;
+
+    const result = await fetchApi(url);
+    const body = await result.text();
+    const loadedCheerio = parseHTML(body);
+    return this.parseNovels(loadedCheerio);
+  }
+
+  async parseNovel(
+    novelPath: string,
+  ): Promise<Plugin.SourceNovel & { totalPages: number }> {
+    const url = this.site + novelPath;
+
+    const result = await fetchApi(url);
+    const body = await result.text();
+
+    const loadedCheerio = parseHTML(body);
+    let lastPage = 1;
+    loadedCheerio(
+      'ul.pagination.pagination-sm > li > a, ul.pagination > li > a',
+    ).each(function () {
+      const page = Number(this.attribs['href']?.match(/\/trang-(\d+)\//)?.[1]);
+      if (page && page > lastPage) lastPage = page;
+    });
+
+    const novel: Plugin.SourceNovel & { totalPages: number } = {
+      path: novelPath,
+      name:
+        loadedCheerio('h3.title').text().trim() ||
+        loadedCheerio('div.book > img').attr('alt') ||
+        'Không có tiêu đề',
+      chapters: [],
+      totalPages: lastPage,
+    };
+
+    novel.cover =
+      loadedCheerio('div.book > img').attr('src') ||
+      loadedCheerio('.book img').attr('src');
+
+    loadedCheerio(
+      'div.desc-text a[style*="display: none"], div.desc-text script, div.desc-text style',
+    ).remove();
+    novel.summary = loadedCheerio('div.desc-text').text().trim();
+
+    novel.author = loadedCheerio('a[itemprop="author"]')
+      .map((i, el) => loadedCheerio(el).text().trim())
+      .toArray()
+      .join(', ');
+
+    novel.genres = loadedCheerio('a[itemprop="genre"]')
+      .map((i, el) => loadedCheerio(el).text().trim())
+      .toArray()
+      .join(', ');
+
+    const statusText = loadedCheerio(
+      '.info .text-success, .info .text-primary, h3:contains("Trạng thái") + span',
+    )
+      .first()
+      .text()
+      .trim();
+
+    if (
+      statusText.toLowerCase().includes('full') ||
+      statusText.toLowerCase().includes('hoàn thành')
+    ) {
+      novel.status = NovelStatus.Completed;
+    } else if (statusText.toLowerCase().includes('đang ra')) {
+      novel.status = NovelStatus.Ongoing;
+    } else {
+      novel.status = NovelStatus.Unknown;
+    }
+
+    novel.chapters = this.parseChapters(loadedCheerio);
+    return novel;
+  }
+
+  async parsePage(novelPath: string, page: string): Promise<Plugin.SourcePage> {
+    const url = `${this.site}${novelPath}trang-${page}/#list-chapter`;
+    const result = await fetchApi(url);
+    const body = await result.text();
+
+    const loadedCheerio = parseHTML(body);
+    const chapters = this.parseChapters(loadedCheerio);
+    return {
+      chapters,
+    };
+  }
+
+  async parseChapter(chapterPath: string): Promise<string> {
+    const result = await fetchApi(this.site + chapterPath);
+    const body = await result.text();
+
+    const loadedCheerio = parseHTML(body);
+
+    const chapterTitle = loadedCheerio('.chapter-title').text().trim();
+    const chapterElement = loadedCheerio('#chapter-c');
+    chapterElement
+      .find('.ads-holder, script, style, [id*="ads"], [class*="ads"]')
+      .remove();
+
+    const chapterText = chapterElement.html() || '';
+
+    return (chapterTitle ? `<h2>${chapterTitle}</h2>` : '') + chapterText;
+  }
+
+  async searchNovels(
+    searchTerm: string,
+    pageNo: number,
+  ): Promise<Plugin.NovelItem[]> {
+    const searchUrl = `${this.site}/tim-kiem?tukhoa=${encodeURIComponent(
+      searchTerm,
+    )}&page=${pageNo}`;
+
+    const result = await fetchApi(searchUrl);
+    const body = await result.text();
+
+    const loadedCheerio = parseHTML(body);
+    return this.parseNovels(loadedCheerio);
+  }
+
+  resolveUrl = (path: string) =>
+    path.startsWith('http') ? path : this.site + path;
+
+  filters = {
+    status: {
+      type: FilterTypes.CheckboxGroup,
+      label: 'Tình trạng',
+      value: [],
+      options: [{ label: 'Đã hoàn thành', value: 'hoan' }],
+    },
+    sort: {
+      type: FilterTypes.Picker,
+      label: 'Sắp xếp',
+      value: '',
+      options: [
+        { label: 'Truyện hot', value: 'truyen-hot' },
+        { label: 'Truyện mới cập nhật', value: 'truyen-moi' },
+        { label: 'Truyện full', value: 'truyen-full' },
+        { label: 'Tiên hiệp hay', value: 'tien-hiep-hay' },
+        { label: 'Kiếm hiệp hay', value: 'kiem-hiep-hay' },
+        { label: 'Truyện teen hay', value: 'truyen-teen-hay' },
+        { label: 'Ngôn tình hay', value: 'ngon-tinh-hay' },
+        { label: 'Ngôn tình ngược', value: 'ngon-tinh-nguoc' },
+        { label: 'Ngôn tình sủng', value: 'ngon-tinh-sung' },
+        { label: 'Ngôn tình hài', value: 'ngon-tinh-hai' },
+        { label: 'Đam mỹ hay', value: 'dam-my-hay' },
+        { label: 'Đam mỹ hài', value: 'dam-my-hai' },
+        { label: 'Đam mỹ h văn', value: 'dam-my-h-van' },
+        { label: 'Đam mỹ sắc', value: 'dam-my-sac' },
+      ],
+    },
+  } satisfies Filters;
+}
+
+export default new TruyenFull();

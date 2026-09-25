@@ -2508,7 +2508,7 @@
 		"name": "Sắc Hiệp Viện",
 		"site": "https://sachiepvien.net",
 		"lang": "Tiếng Việt",
-		"version": "1.0.5",
+		"version": "1.0.10",
 		"url": "https://raw.githubusercontent.com/vigorous2/lnreader-plugins/plugins/v3.0.0/.js/src/plugins/vietnamese/sachiepvien.js",
 		"iconUrl": "https://raw.githubusercontent.com/vigorous2/lnreader-plugins/plugins/v3.0.0/public/static/src/vi/sachiepvien/icon.png"
 	},
@@ -2520,6 +2520,15 @@
 		"version": "2.0.0",
 		"url": "https://raw.githubusercontent.com/vigorous2/lnreader-plugins/plugins/v3.0.0/.js/src/plugins/vietnamese/truyenchu.js",
 		"iconUrl": "https://raw.githubusercontent.com/vigorous2/lnreader-plugins/plugins/v3.0.0/public/static/src/vi/truyenchu/icon.png"
+	},
+	{
+		"id": "truyenfull",
+		"name": "Truyện Full",
+		"site": "https://truyenfull.live",
+		"lang": "Tiếng Việt",
+		"version": "2.0.0",
+		"url": "https://raw.githubusercontent.com/vigorous2/lnreader-plugins/plugins/v3.0.0/.js/src/plugins/vietnamese/truyenfull.js",
+		"iconUrl": "https://raw.githubusercontent.com/vigorous2/lnreader-plugins/plugins/v3.0.0/public/static/src/vi/truyenfull/icon.png"
 	},
 	{
 		"id": "truyenss.com",
